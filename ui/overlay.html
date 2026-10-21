@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snapmark capture</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: #000; overflow: hidden; }
+  #stage { position: fixed; inset: 0; cursor: crosshair; }
+  #stage.mode-window, #stage.mode-full { cursor: default; }
+  #shot { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+  #dim { position: absolute; inset: 0; background: rgba(8, 9, 12, 0.32); pointer-events: none; }
+
+  #focus {
+    position: absolute; pointer-events: none; display: none;
+    box-shadow: 0 0 0 6000px rgba(8, 9, 12, 0.58);
+  }
+  #focus.area { outline: 1.5px solid #fff; border-radius: 2px; }
+  #focus.window { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 12px; }
+  #focus.full { outline: 4px solid var(--accent); outline-offset: -4px; box-shadow: none; }
+  #focus .grid, #focus .handles { position: absolute; inset: 0; display: none; }
+  #focus.area.has-handles .grid, #focus.area.has-handles .handles { display: block; }
+  .grid span { position: absolute; background: rgba(255, 255, 255, 0.22); }
+  .grid .v { top: 0; bottom: 0; width: 1px; }
+  .grid .h { left: 0; right: 0; height: 1px; }
+  .handles span { position: absolute; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); border-radius: 999px; }
+  .handles .c { width: 12px; height: 12px; }
+  .handles .eh { width: 20px; height: 6px; left: calc(50% - 10px); }
+  .handles .ev { width: 6px; height: 20px; top: calc(50% - 10px); }
+
+  #badge { position: absolute; display: none; align-items: center; gap: 6px; white-space: nowrap; pointer-events: none; }
+  .chip {
+    height: 26px; padding: 0 10px; border-radius: 7px; background: rgba(22, 23, 27, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1); font-family: var(--mono); font-size: 12px;
+    display: flex; align-items: center; gap: 8px; color: var(--text);
+  }
+  .chip.sub { padding: 0 8px; font-size: 11px; color: var(--muted); }
+
+  #loupe { position: absolute; display: none; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+  #loupe canvas { width: 120px; height: 120px; border-radius: 999px; border: 3px solid #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); background: #000; }
+  #loupe .info {
+    padding: 6px 10px; border-radius: 7px; background: rgba(22, 23, 27, 0.92); border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: var(--mono); font-size: 11px; color: var(--text-2); display: flex; gap: 10px; align-items: center;
+  }
+  #loupe .sw { width: 10px; height: 10px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3); }
+
+  #hint-wrap, #hud-wrap { position: absolute; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
+  #hint-wrap { bottom: 116px; }
+  #hud-wrap { bottom: 40px; }
+  #hint { padding: 7px 14px; border-radius: 999px; background: rgba(22, 23, 27, 0.8); font-size: 12px; color: var(--text-2); }
+  #hud {
+    pointer-events: auto; cursor: default;
+    display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 16px;
+    background: rgba(28, 29, 34, 0.94); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  }
+  .modes { display: flex; gap: 2px; }
+  .mode {
+    height: 48px; min-width: 76px; padding: 0 10px; border: 0; border-radius: 10px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    font-size: 11px; font-weight: 500; background: transparent; color: var(--text-2);
+  }
+  .mode:hover { background: rgba(255, 255, 255, 0.05); }
+  .mode[aria-pressed="true"] { background: #FF6A3D2E; color: var(--accent); }
+  .vsep { width: 1px; height: 32px; background: rgba(255, 255, 255, 0.1); }
+  .opt {
+    height: 48px; padding: 0 12px; border: 0; border-radius: 10px; cursor: pointer; background: transparent;
+    color: var(--text-2); font-size: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .opt:hover { background: rgba(255, 255, 255, 0.05); }
+  .opt .lbl { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+  .opt .lbl small { font-size: 11px; color: var(--muted); }
+  .opt .lbl b { color: var(--text); font-weight: 500; min-width: 84px; text-align: left; }
+  #go {
+    height: 48px; padding: 0 18px; border: 0; border-radius: 10px; cursor: pointer; background: var(--accent);
+    color: var(--accent-ink); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+  }
+  #go:hover { filter: brightness(1.08); }
+  #go span { font-family: var(--mono); font-size: 12px; opacity: 0.7; }
+  #cancel {
+    width: 40px; height: 48px; border: 0; border-radius: 10px; cursor: pointer; background: transparent; color: var(--muted);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #cancel:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .hud-hidden #hud-wrap, .hud-hidden #hint-wrap { opacity: 0; transition: opacity .12s; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <img id="shot" alt="">
+  <div id="dim"></div>
+  <div id="focus">
+    <div class="grid"><span class="v" style="left:33.333%"></span><span class="v" style="left:66.666%"></span><span class="h" style="top:33.333%"></span><span class="h" style="top:66.666%"></span></div>
+    <div class="handles">
+      <span class="c" style="left:-6px;top:-6px"></span><span class="c" style="right:-6px;top:-6px"></span>
+      <span class="c" style="left:-6px;bottom:-6px"></span><span class="c" style="right:-6px;bottom:-6px"></span>
+      <span class="eh" style="top:-3px"></span><span class="eh" style="bottom:-3px"></span>
+      <span class="ev" style="left:-3px"></span><span class="ev" style="right:-3px"></span>
+    </div>
+  </div>
+  <div id="badge"><span class="chip" id="badge-main"></span><span class="chip sub" id="badge-ratio"></span></div>
+  <div id="loupe"><canvas width="240" height="240"></canvas><div class="info"><span id="loupe-xy"></span><span class="sw" id="loupe-sw"></span><span id="loupe-hex"></span></div></div>
+  <div id="hint-wrap"><div id="hint"></div></div>
+  <div id="hud-wrap">
+    <div id="hud" role="toolbar" aria-label="Capture options">
+      <div class="modes" id="modes"></div>
+      <div class="vsep"></div>
+      <button type="button" class="opt" id="timer" aria-label="Self-timer"></button>
+      <button type="button" class="opt" id="after" aria-label="After capture"></button>
+      <div class="vsep"></div>
+      <button type="button" id="go">Capture<span>↵</span></button>
+      <button type="button" id="cancel" aria-label="Cancel (Esc)"></button>
+    </div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script src="overlay.js"></script>
+</body>
+</html>

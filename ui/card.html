@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Capture ready</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: transparent; overflow: hidden; }
+  body { padding: 24px; }
+  .card {
+    width: 380px; border-radius: 16px; background: rgba(30, 31, 36, 0.97); border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5); overflow: hidden; opacity: 0; transform: translateY(8px);
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .card.in { opacity: 1; transform: none; }
+  .thumb-wrap { padding: 12px 12px 0; position: relative; }
+  .thumb {
+    height: 210px; border-radius: 10px; position: relative; overflow: hidden; cursor: pointer;
+    background: repeating-conic-gradient(#24252B 0% 25%, #1C1D22 0% 50%) 50% / 12px 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .thumb img { max-width: 100%; max-height: 100%; display: block; }
+  .pill {
+    position: absolute; left: 24px; top: 24px; height: 26px; padding: 0 10px; border-radius: 999px;
+    background: rgba(17, 17, 19, 0.82); color: #fff; font-size: 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .pill svg { color: var(--ok); }
+  .dismiss {
+    position: absolute; right: 22px; top: 22px; width: 28px; height: 28px; border: 0; border-radius: 999px;
+    background: rgba(17, 17, 19, 0.82); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .meta { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 4px; font-size: 12px; color: var(--muted); }
+  .meta .mono { font-size: 11px; }
+  .actions { display: grid; grid-template-columns: 1.5fr repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px 12px 14px; }
+  .actions button {
+    height: 44px; border: 0; border-radius: 10px; background: #2C2D33; color: var(--text);
+    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  }
+  .actions button:hover { filter: brightness(1.15); }
+  .actions .primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .bar { height: 3px; background: rgba(255, 255, 255, 0.06); }
+  .bar div { height: 3px; width: 100%; background: var(--accent); transform-origin: left; }
+</style>
+</head>
+<body>
+<div class="card" role="dialog" aria-label="Capture ready">
+  <div class="thumb-wrap">
+    <div class="thumb" id="thumb" title="Click to annotate"><img id="img" alt="Capture preview"></div>
+    <div class="pill" id="pill"></div>
+    <button type="button" class="dismiss" id="dismiss" aria-label="Dismiss"></button>
+  </div>
+  <div class="meta"><span id="where">⌘V to paste anywhere</span><span class="mono" id="dims"></span></div>
+  <div class="actions">
+    <button type="button" class="primary" id="annotate"></button>
+    <button type="button" id="copy" aria-label="Copy (⌘C)" title="Copy"></button>
+    <button type="button" id="save" aria-label="Save (⌘S)" title="Save to folder"></button>
+    <button type="button" id="pin" aria-label="Pin on screen" title="Pin on screen"></button>
+  </div>
+  <div class="bar"><div id="progress"></div></div>
+</div>
+<script src="common.js"></script>
+<script>
+const LIFETIME = 8000;
+let current = null;
+let remaining = LIFETIME;
+let lastTick = 0;
+let hovering = false;
+let raf = 0;
+
+$('#dismiss').innerHTML = icon('close', 14, 2);
+$('#annotate').innerHTML = `${icon('pen', 16, 1.9)}Annotate`;
+$('#copy').innerHTML = icon('copy', 18, 1.9);
+$('#save').innerHTML = icon('save', 18, 1.9);
+$('#pin').innerHTML = icon('pin', 18, 1.9);
+
+function pill(text) {
+  $('#pill').innerHTML = `${icon('check', 14, 2.2)}${text}`;
+}
+
+async function show(info) {
+  if (!info) return;
+  current = info;
+  const old = $('#img').src;
+  $('#img').src = await captureObjectURL(info.id);
+  if (old) URL.revokeObjectURL(old);
+  $('#dims').textContent = `${info.width} × ${info.height} · PNG`;
+  pill(info.saved ? 'Saved & copied' : 'Copied to clipboard');
+  $('#where').textContent = info.saved ? info.saved.replace(/^.*\//, '') : '⌘V to paste anywhere';
+  remaining = LIFETIME;
+  lastTick = performance.now();
+  $('.card').classList.add('in');
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function tick(now) {
+  if (!hovering) remaining -= now - lastTick;
+  lastTick = now;
+  $('#progress').style.transform = `scaleX(${Math.max(0, remaining / LIFETIME)})`;
+  if (remaining <= 0) return dismiss();
+  raf = requestAnimationFrame(tick);
+}
+
+function dismiss() {
+  cancelAnimationFrame(raf);
+  $('.card').classList.remove('in');
+  current = null;
+  setTimeout(() => invoke('card_dismiss'), 160);
+}
+
+async function act(fn) {
+  if (!current) return;
+  try { await fn(current.id); } catch (e) { pill(String(e)); }
+}
+
+$('.card').addEventListener('mouseenter', () => { hovering = true; });
+$('.card').addEventListener('mouseleave', () => { hovering = false; });
+$('#dismiss').addEventListener('click', dismiss);
+$('#thumb').addEventListener('click', () => act(async (id) => { await invoke('open_editor_cmd', { id }); dismiss(); }));
+$('#annotate').addEventListener('click', () => act(async (id) => { await invoke('open_editor_cmd', { id }); dismiss(); }));
+$('#copy').addEventListener('click', () => act(async (id) => { await invoke('copy_capture', { id }); pill('Copied to clipboard'); remaining = LIFETIME; }));
+$('#save').addEventListener('click', () => act(async (id) => {
+  const path = await invoke('save_capture', { id });
+  pill('Saved');
+  $('#where').textContent = path.replace(/^.*\//, '');
+  $('#where').title = path;
+  remaining = LIFETIME;
+}));
+$('#pin').addEventListener('click', () => act(async (id) => { await invoke('pin_capture_cmd', { id }); dismiss(); }));
+
+listen('card:show', async () => show(await invoke('card_current')));
+invoke('card_current').then(show);
+</script>
+</body>
+</html>

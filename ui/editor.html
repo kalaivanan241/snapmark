@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snapmark editor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: var(--bg); overflow: hidden; }
+  .app { height: 100vh; display: flex; flex-direction: column; }
+
+  /* Title bar / unified toolbar (native traffic lights sit in the left gutter) */
+  .titlebar { height: 52px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 14px 0 86px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  .group { display: flex; align-items: center; gap: 2px; }
+  .group.right { gap: 8px; }
+  .tb-btn { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .tb-btn:hover { background: rgba(255, 255, 255, 0.06); }
+  .tb-btn:disabled { color: #55565E; cursor: default; background: transparent; }
+  .tb-btn.on { color: var(--accent); background: #FF6A3D2E; }
+  .title { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; }
+  .title .name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .title .meta { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .zoom-wrap { position: relative; }
+  .zoom-btn { height: 32px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--bg); color: var(--text-2); font-family: var(--mono); font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; position: relative; }
+  .vline { width: 1px; height: 20px; background: var(--line-2); }
+  .act { height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: #2C2D33; color: var(--text); font-weight: 500; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .act:hover { filter: brightness(1.15); }
+  .act .mono { font-size: 11px; color: var(--muted); }
+  .act.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .act.primary .mono { color: inherit; opacity: 0.75; }
+  .menu-pop { position: absolute; top: 38px; right: 0; min-width: 140px; padding: 4px; border-radius: 10px; background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06); z-index: 20; display: none; }
+  .menu-pop.open { display: block; }
+  .menu-pop button { width: 100%; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); display: flex; justify-content: space-between; align-items: center; padding: 0 10px; font-size: 12px; cursor: pointer; }
+  .menu-pop button:hover { background: var(--accent-soft); color: var(--text); }
+  .menu-pop .mono { color: var(--faint); font-size: 11px; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* Tool rail */
+  .rail { width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; }
+  .rail::-webkit-scrollbar { display: none; }
+  .tool { width: 40px; height: 40px; flex: none; border: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: transparent; color: var(--muted); }
+  .tool:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-2); }
+  .tool[aria-pressed="true"] { background: #FF6A3D2E; color: var(--accent); }
+  .rail .div { width: 28px; height: 1px; background: var(--line); margin: 4px 0; flex: none; }
+  .rail .spacer { flex: 1; }
+  .recap { border: 1px dashed var(--line-3); color: var(--muted); }
+
+  /* Canvas */
+  .stage { flex: 1; min-width: 0; position: relative; overflow: hidden; background-color: #121316; background-image: radial-gradient(#2A2B31 1px, transparent 1px); background-size: 20px 20px; }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #text-edit {
+    position: absolute; display: none; margin: 0; padding: 0; border: 0; outline: 1px dashed var(--accent); outline-offset: 4px;
+    background: transparent; resize: none; overflow: hidden; white-space: pre; line-height: 1.25;
+    font-family: system-ui, -apple-system, sans-serif; -webkit-user-select: text; user-select: text; caret-color: var(--accent);
+  }
+  .mini { position: absolute; display: none; align-items: center; gap: 2px; padding: 4px; border-radius: 10px; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.06); z-index: 5; }
+  .mini button { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .mini button:hover { background: rgba(255, 255, 255, 0.07); }
+  .mini .del { color: var(--danger); }
+  .mini .dot { width: 14px; height: 14px; border-radius: 999px; box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px #5A5B63; }
+  .mini-pal { position: absolute; top: 40px; left: 0; display: none; grid-template-columns: repeat(4, 22px); gap: 6px; padding: 8px; border-radius: 10px; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06); }
+  .mini-pal.open { display: grid; }
+  .mini-pal button { width: 22px; height: 22px; padding: 0; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+  .zoom-pill { position: absolute; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+  .zoom-pill button { height: 28px; min-width: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; }
+  .zoom-pill button.pm { font-size: 16px; padding: 0; }
+  .zoom-pill button:hover { background: rgba(255, 255, 255, 0.07); }
+  .zoom-pill span { min-width: 44px; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+  .crop-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: none; gap: 6px; padding: 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+  .crop-bar.open { display: flex; }
+  .crop-bar button { height: 30px; padding: 0 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .crop-bar button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .crop-bar .mono { font-size: 11px; opacity: 0.7; }
+  .toast { position: absolute; left: 50%; top: 16px; transform: translate(-50%, -8px); height: 30px; padding: 0 12px; border-radius: 999px; background: rgba(17, 17, 19, 0.88); color: #fff; font-size: 12px; display: flex; align-items: center; gap: 6px; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast svg { color: var(--ok); }
+  .toast.err svg { color: var(--danger); }
+
+  /* Inspector */
+  .inspector { width: 288px; flex: none; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow-y: auto; }
+  .insp-head { height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--line); }
+  .insp-head b { font-size: 14px; font-weight: 600; }
+  kbd { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line-3); color: var(--text-2); font-family: var(--mono); font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  .sections { padding: 20px; display: flex; flex-direction: column; gap: 22px; }
+  .sec { display: flex; flex-direction: column; gap: 10px; }
+  .sec[hidden] { display: none; }
+  .sec-h { display: flex; justify-content: space-between; align-items: center; }
+  .sec-h .lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .sec-h .val { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+  .swatches { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 6px; align-items: center; }
+  .swatch { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 999px; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+  .swatch.custom { background: conic-gradient(#FF453A, #FFD60A, #30D158, #64D2FF, #0A84FF, #BF5AF2, #FF453A); position: relative; overflow: hidden; }
+  .swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .wide-btn { flex: 1; height: 30px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); color: var(--text-2); font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+  .wide-btn.on { border-color: var(--accent); color: var(--accent); }
+  .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 9px; background: var(--well); }
+  .seg button { height: 30px; border: 0; border-radius: 7px; cursor: pointer; font-size: 12px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .seg button[aria-pressed="true"] { background: var(--line-2); color: var(--text); }
+  .seg .bar { width: 28px; border-radius: 999px; background: currentColor; }
+  input[type=range] { width: 100%; margin: 0; height: 4px; accent-color: var(--accent); }
+  .switch-row { display: flex; align-items: center; justify-content: space-between; padding: 0; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; width: 100%; }
+  .switch-row .sub { display: flex; flex-direction: column; gap: 2px; }
+  .switch-row .sub small { font-size: 12px; color: var(--muted); }
+  .switch { width: 32px; height: 18px; flex: none; border-radius: 999px; padding: 2px; display: flex; background: var(--line-3); transition: background .15s; }
+  .switch i { width: 14px; height: 14px; border-radius: 999px; background: #fff; transition: transform .15s; }
+  .switch.on { background: var(--accent); }
+  .switch.on i { transform: translateX(14px); }
+  .hr { height: 1px; background: var(--line); margin: 0 20px; flex: none; }
+  .frames { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .frames button { height: 32px; padding: 0; border: 0; border-radius: 8px; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+  .pad-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-2); }
+  .grow { flex: 1; }
+  .insp-foot { padding: 16px 20px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+  .insp-foot svg { color: var(--ok); }
+  .insp-foot b { color: var(--text); font-weight: 400; }
+
+  .status { height: 32px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; background: var(--bg); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .status .mono { font-size: 11px; white-space: nowrap; }
+  #hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  @media (max-width: 1080px) { .inspector { width: 248px; } .swatches { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="group">
+      <button type="button" class="tb-btn" id="undo" aria-label="Undo (⌘Z)" title="Undo (⌘Z)"></button>
+      <button type="button" class="tb-btn" id="redo" aria-label="Redo (⇧⌘Z)" title="Redo (⇧⌘Z)"></button>
+    </div>
+    <div class="title" data-tauri-drag-region>
+      <div class="name" id="name" data-tauri-drag-region>Loading…</div>
+      <div class="meta" id="meta" data-tauri-drag-region></div>
+    </div>
+    <div class="group right">
+      <div class="zoom-wrap" id="zoom-btn">
+        <button type="button" class="zoom-btn" id="zoom-toggle" aria-label="Zoom level"><span id="zoom-label">100%</span><span id="zoom-chev"></span></button>
+        <div class="menu-pop" id="zoom-menu">
+          <button type="button" data-z="fit">Fit <span class="mono">⌘0</span></button>
+          <button type="button" data-z="actual">Actual size <span class="mono">⌘1</span></button>
+          <button type="button" data-z="0.25">25%</button>
+          <button type="button" data-z="0.5">50%</button>
+          <button type="button" data-z="1">100%</button>
+          <button type="button" data-z="2">200%</button>
+        </div>
+      </div>
+      <div class="vline"></div>
+      <button type="button" class="tb-btn" id="pin-top" aria-label="Keep on top of all windows" title="Keep window on top"></button>
+      <button type="button" class="tb-btn" id="save-as" aria-label="Save as… (⇧⌘S)" title="Save as… (⇧⌘S)"></button>
+      <button type="button" class="act" id="save"><span id="save-ic"></span>Save<span class="mono">⌘S</span></button>
+      <button type="button" class="act primary" id="copy"><span id="copy-ic"></span>Copy<span class="mono">⌘C</span></button>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="rail" role="toolbar" aria-label="Drawing tools" aria-orientation="vertical" id="rail"></div>
+
+    <div class="stage" id="stage">
+      <canvas id="view"></canvas>
+      <textarea id="text-edit" spellcheck="false" rows="1"></textarea>
+      <div class="mini" id="mini" role="toolbar" aria-label="Selection actions">
+        <button type="button" id="mini-color" aria-label="Annotation color"><span class="dot"></span></button>
+        <button type="button" id="mini-dup" aria-label="Duplicate (⌘D)" title="Duplicate (⌘D)"></button>
+        <button type="button" id="mini-front" aria-label="Bring to front" title="Bring to front"></button>
+        <button type="button" id="mini-del" class="del" aria-label="Delete (⌫)" title="Delete (⌫)"></button>
+        <div class="mini-pal" id="mini-pal"></div>
+      </div>
+      <div class="crop-bar" id="crop-bar">
+        <button type="button" id="crop-reset">Reset</button>
+        <button type="button" id="crop-cancel">Cancel <span class="mono">esc</span></button>
+        <button type="button" class="primary" id="crop-apply">Apply <span class="mono">↵</span></button>
+      </div>
+      <div class="zoom-pill">
+        <button type="button" class="pm" id="zoom-out" aria-label="Zoom out (⌘−)">−</button>
+        <span id="zoom-pct">100%</span>
+        <button type="button" class="pm" id="zoom-in" aria-label="Zoom in (⌘+)">+</button>
+        <button type="button" id="zoom-fit">Fit</button>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+
+    <div class="inspector">
+      <div class="insp-head"><b id="tool-name">Arrow</b><kbd id="tool-key">A</kbd></div>
+      <div class="sections">
+        <div class="sec" id="sec-color">
+          <div class="sec-h"><span class="lbl">Color</span><span class="val" id="hex"></span></div>
+          <div class="swatches" id="swatches"></div>
+          <div style="display:flex;gap:8px"><button type="button" class="wide-btn" id="eyedrop"></button></div>
+        </div>
+        <div class="sec" id="sec-stroke">
+          <div class="sec-h"><label class="lbl" for="stroke" id="stroke-lbl">Stroke</label><span class="val" id="stroke-val"></span></div>
+          <div class="seg" id="strokes"></div>
+          <input id="stroke" type="range" min="1" max="16" step="1">
+        </div>
+        <div class="sec" id="sec-dash">
+          <span class="sec-h"><span class="lbl">Line style</span></span>
+          <div class="seg" id="dashes"></div>
+        </div>
+        <div class="sec" id="sec-fill">
+          <span class="sec-h"><span class="lbl">Fill</span></span>
+          <div class="seg" id="fills"></div>
+        </div>
+        <button type="button" class="switch-row" role="switch" id="shadow"><span>Drop shadow</span><span class="switch"><i></i></span></button>
+      </div>
+      <div class="hr"></div>
+      <div class="sections" style="gap:18px">
+        <button type="button" class="switch-row" role="switch" id="frame"><span class="sub"><b style="font-weight:600">Frame</b><small>Background, padding and shadow on export</small></span><span class="switch"><i></i></span></button>
+        <div class="frames" id="frames"></div>
+        <div class="sec" style="gap:8px">
+          <div class="pad-row"><label for="pad">Padding</label><span class="mono" style="font-size:11px" id="pad-val"></span></div>
+          <input id="pad" type="range" min="0" max="96" step="4">
+        </div>
+      </div>
+      <div class="grow"></div>
+      <div class="insp-foot"><span id="foot-ic"></span><span id="foot"></span></div>
+    </div>
+  </div>
+
+  <div class="status"><span id="hint"></span><span class="mono" id="counts"></span></div>
+</div>
+<script src="common.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

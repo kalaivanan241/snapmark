@@ -1,0 +1,52 @@
+/* Geist & Geist Mono — SIL Open Font License 1.1 (https://github.com/vercel/geist-font). */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url('fonts/Geist-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  src: url('fonts/GeistMono-latin.woff2') format('woff2');
+}
+
+:root {
+  --accent: #FF6A3D;
+  --accent-soft: #FF6A3D24;
+  --accent-ink: #1A0E08;
+  --bg: #1A1B1F;
+  --panel: #1E1F24;
+  --bar: #202126;
+  --line: #2C2D33;
+  --line-2: #34353C;
+  --line-3: #3A3B42;
+  --well: #16171B;
+  --text: #ECECEF;
+  --text-2: #C4C4CC;
+  --muted: #A1A1AA;
+  --faint: #8B8B94;
+  --danger: #FF8A80;
+  --ok: #30D158;
+  --mono: 'Geist Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  color: var(--text);
+  font: 13px/1.4 'Geist', -apple-system, 'SF Pro Text', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+button { font: inherit; color: inherit; }
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+svg.i { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.mono { font-family: var(--mono); }
+.hover-lift:hover { filter: brightness(1.15); }

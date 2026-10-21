@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snapmark</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: transparent; overflow: hidden; }
+  body { padding: 10px 16px 22px; }
+  .panel {
+    width: 344px; border-radius: 14px; background: rgba(30, 31, 36, 0.97); border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); padding: 8px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+  .logo { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; }
+  .icon-btn { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .icon-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+  .row {
+    height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text);
+    display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left; width: 100%;
+  }
+  .row.small { height: 34px; }
+  .row:hover, .row:focus-visible { background: var(--accent-soft); outline: none; }
+  .row span.grow { flex: 1; }
+  .row .k { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .row svg { color: var(--text-2); }
+  .row.warn { color: #FFD60A; }
+  .row.warn svg { color: #FFD60A; }
+  .sep { height: 1px; background: rgba(255, 255, 255, 0.08); margin: 8px 4px; }
+  .sec { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; }
+  .sec span { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .sec a { font-size: 12px; color: var(--muted); text-decoration: none; cursor: pointer; }
+  .sec a:hover { color: var(--text); }
+  .recent { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 8px 6px; }
+  .shot { padding: 0; border: 0; background: transparent; display: flex; flex-direction: column; gap: 6px; cursor: pointer; text-align: left; min-width: 0; }
+  .shot .t {
+    height: 62px; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;
+    background: #16171B; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  .shot img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+  .shot:first-child .t { box-shadow: 0 0 0 2px var(--accent); }
+  .shot small { font-size: 11px; color: var(--muted); }
+  .shot:first-child small { color: var(--text-2); }
+  .empty { padding: 4px 8px 10px; font-size: 12px; color: var(--faint); }
+  .switch { width: 32px; height: 18px; border-radius: 999px; padding: 2px; display: flex; background: var(--line-3); transition: background .15s; flex: none; }
+  .switch i { width: 14px; height: 14px; border-radius: 999px; background: #fff; transition: transform .15s; }
+  .switch.on { background: var(--accent); }
+  .switch.on i { transform: translateX(14px); }
+</style>
+</head>
+<body>
+<div class="panel" id="panel">
+  <div class="head">
+    <div class="brand"><span class="logo" id="logo"></span>Snapmark</div>
+    <button type="button" class="icon-btn" id="prefs" aria-label="Preferences" title="Edit hotkeys & preferences (config.json)"></button>
+  </div>
+  <div id="rows"></div>
+  <div class="sep"></div>
+  <div class="sec"><span>Recent</span><a id="show-all">Show all</a></div>
+  <div id="recent"></div>
+  <div class="sep"></div>
+  <div id="footer-rows"></div>
+</div>
+<script src="common.js"></script>
+<script>
+const CAPTURES = [
+  ['area', 'area', 'Capture area'],
+  ['window', 'window', 'Capture window'],
+  ['full', 'full', 'Capture full screen'],
+  ['color', 'picker', 'Pick a color'],
+];
+
+$('#logo').innerHTML = icon('logo', 16, 2);
+$('#prefs').innerHTML = icon('gear', 16, 1.75);
+$('#prefs').addEventListener('click', () => { invoke('open_preferences'); invoke('hide_menu'); });
+$('#show-all').addEventListener('click', () => { invoke('open_folder'); invoke('hide_menu'); });
+
+function row(ic, label, right, onClick, cls = '') {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `row ${cls}`;
+  b.innerHTML = `${ic ? icon(ic, 18) : '<span style="width:18px"></span>'}<span class="grow">${label}</span>${right || ''}`;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function refresh() {
+  const s = await invoke('menu_state');
+  const rows = $('#rows');
+  rows.replaceChildren();
+  if (!s.screenAccess) {
+    rows.append(row('shield', 'Allow screen recording…', '', () => invoke('open_screen_settings'), 'warn'));
+  }
+  for (const [mode, ic, label] of CAPTURES) {
+    rows.append(row(ic, label, `<span class="k">${hotkeyLabel(s.hotkeys[mode])}</span>`, () => invoke('start_capture_cmd', { mode })));
+  }
+
+  const recent = $('#recent');
+  recent.replaceChildren();
+  if (s.recent.length) {
+    const grid = document.createElement('div');
+    grid.className = 'recent';
+    for (const c of s.recent) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'shot';
+      b.setAttribute('aria-label', `Open capture from ${timeAgo(c.takenMs)}`);
+      b.innerHTML = `<span class="t"><img alt=""></span><small>${timeAgo(c.takenMs)}</small>`;
+      captureObjectURL(c.id).then((u) => { b.querySelector('img').src = u; });
+      b.addEventListener('click', () => { invoke('open_editor_cmd', { id: c.id }); invoke('hide_menu'); });
+      grid.append(b);
+    }
+    recent.append(grid);
+  } else {
+    recent.innerHTML = '<div class="empty">Captures you take this session show up here.</div>';
+  }
+
+  const foot = $('#footer-rows');
+  foot.replaceChildren(
+    row('pen', 'Open image to annotate…', '<span class="k">⌘O</span>', () => invoke('open_image'), 'small'),
+    row('folder', 'Open captures folder', '', () => { invoke('open_folder'); invoke('hide_menu'); }, 'small'),
+  );
+  if (s.pins) foot.append(row('pin', 'Pinned screenshots', `<span class="k">${s.pins}</span>`, () => invoke('show_pins'), 'small'));
+  const login = row('power', 'Open at login', `<span class="switch ${s.autostart ? 'on' : ''}"><i></i></span>`, async () => {
+    const on = await invoke('set_autostart', { on: !login.querySelector('.switch').classList.contains('on') });
+    login.querySelector('.switch').classList.toggle('on', on);
+  }, 'small');
+  foot.append(login, row(null, 'Quit Snapmark', '<span class="k">⌘Q</span>', () => invoke('quit_app'), 'small'));
+
+  const h = Math.ceil($('#panel').getBoundingClientRect().height) + 32;
+  await appWindow.setSize(new TAURI.dpi.LogicalSize(376, h));
+}
+
+window.addEventListener('keydown', (e) => {
+  const items = [...document.querySelectorAll('.row, .shot')];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') invoke('hide_menu');
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  else if (e.metaKey && e.key.toLowerCase() === 'q') invoke('quit_app');
+  else if (e.metaKey && e.key.toLowerCase() === 'o') invoke('open_image');
+});
+
+listen('menu:show', refresh);
+refresh();
+</script>
+</body>
+</html>

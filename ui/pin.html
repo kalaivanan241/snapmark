@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pinned screenshot</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { background: #111; overflow: hidden; }
+  img { position: fixed; inset: 0; width: 100%; height: 100%; display: block; object-fit: fill; cursor: grab; -webkit-user-drag: none; }
+  .tools {
+    position: fixed; right: 8px; top: 8px; display: flex; gap: 2px; padding: 4px; border-radius: 10px;
+    background: rgba(30, 31, 36, 0.92); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    opacity: 0; transition: opacity .12s;
+  }
+  body:hover .tools { opacity: 1; }
+  .tools button { width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .tools button:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+</style>
+</head>
+<body>
+<img id="img" alt="Pinned screenshot">
+<div class="tools">
+  <button type="button" id="edit" title="Annotate"></button>
+  <button type="button" id="copy" title="Copy"></button>
+  <button type="button" id="close" title="Close (Esc)"></button>
+</div>
+<script src="common.js"></script>
+<script>
+const id = Number(new URLSearchParams(location.search).get('id'));
+$('#edit').innerHTML = icon('pen', 15, 1.9);
+$('#copy').innerHTML = icon('copy', 15, 1.9);
+$('#close').innerHTML = icon('close', 15, 2);
+captureObjectURL(id).then((u) => { $('#img').src = u; });
+
+$('#img').addEventListener('mousedown', (e) => { if (e.button === 0 && e.detail === 1) appWindow.startDragging(); });
+$('#img').addEventListener('dblclick', () => invoke('open_editor_cmd', { id }));
+$('#edit').addEventListener('click', () => invoke('open_editor_cmd', { id }));
+$('#copy').addEventListener('click', () => invoke('copy_capture', { id }));
+$('#close').addEventListener('click', () => appWindow.close());
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' || (e.metaKey && e.key.toLowerCase() === 'w')) appWindow.close();
+  if (e.metaKey && e.key.toLowerCase() === 'c') invoke('copy_capture', { id });
+});
+</script>
+</body>
+</html>
